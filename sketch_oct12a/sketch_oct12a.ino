@@ -17,7 +17,7 @@ void loop() {
   if (Serial1.available()) {
     String in = Serial1.readStringUntil('\n');
     //Serial.print("Received via UART1: ");
-    Serial.println(in);
+    Serial.println(in); 
 
     // TODO (formatting)
     // - Send 1 vs 255 for mode
