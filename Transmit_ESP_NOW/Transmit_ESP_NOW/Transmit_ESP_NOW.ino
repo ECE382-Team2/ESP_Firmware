@@ -7,25 +7,21 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
+// UART1 pins for the ESP32-S3
+#define RXD1 18 // A0
+#define TXD1 17 // A1 but transmit to PSoC not implemented yet
+
+
 // REPLACE WITH YOUR RECEIVER MAC Address
 uint8_t broadcastAddress[] = {0xb4, 0x3a, 0x45, 0xb0, 0xca, 0x5c}; // ESP with duct tape  receives
 
-// Structure example to send data
-// Must match the receiver structure
-typedef struct struct_message {
-  char a[32];
-  int b;
-  float c;
-  bool d;
-} struct_message;
-
-// Create a struct_message called myData
-struct_message myData;
+// Char for transmitting data
+char outChar;
 
 esp_now_peer_info_t peerInfo;
 
 // callback when data is sent
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
   Serial.print("\r\nLast Packet Send Status:\t");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
@@ -45,7 +41,7 @@ void setup() {
 
   // Once ESPNow is successfully Init, we will register for Send CB to
   // get the status of Trasnmitted packet
-  (esp_now_register_send_cb(OnDataSent);
+  (esp_now_register_send_cb(OnDataSent));
   
   // Register peer
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
@@ -57,23 +53,27 @@ void setup() {
     Serial.println("Failed to add peer");
     return;
   }
+
+  
+  Serial1.begin(9600, SERIAL_8N1, RXD1, TXD1); // 8 data, no parity, 1 stop bit
 }
  
-void loop() {
-  // Set values to send
-  strcpy(myData.a, "THIS IS A CHAR");
-  myData.b = random(1,20);
-  myData.c = 1.2;
-  myData.d = false;
-  
-  // Send message via ESP-NOW
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
-   
-  if (result == ESP_OK) {
-    Serial.println("Sent with success");
+void loop() {  
+
+  if (Serial1.available()) {
+    outChar = Serial1.read();
+    //Serial.print("Received via UART1: ");
+
+    // Send message via ESP-NOW
+    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outChar, sizeof(outChar));
+    
+    if (result == ESP_OK) {
+      Serial.println("Sent with success");
+    }
+    else {
+      Serial.println("Error sending the data");
+    }
+    
   }
-  else {
-    Serial.println("Error sending the data");
-  }
-  delay(2000);
+
 }

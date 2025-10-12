@@ -32,11 +32,12 @@ void setup() {
   Serial.begin(9600);
 
   // Initialize BLE
-  BLEDevice::init("ESP32_COINTF_WIRELESS_OREO"); // Name of the device
+  BLEDevice::init("WIRELESS_OREO"); // Name of the device
 
   // Create the BLE Server
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
+  pServer->getAdvertising()->setScanResponse(true); // Allows a scan response, no pairing required
 
   // Create a service
     BLEService *pService = pServer->createService(SERVICE_UUID);
@@ -56,6 +57,8 @@ void setup() {
     // Start advertising the service
     BLEAdvertising *pAdvertising = pServer->getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
+    //esp_ble_gap_set_prefer_conn_params(BLEDevice::getAddress(), 0x20, 0x40, 0, 100); // Increases advertising interval (in ms)
+    pAdvertising->setScanResponse(true);
     pAdvertising->start();
 
     Serial.println("Waiting for a client to connect...");
@@ -69,14 +72,16 @@ void setup() {
 
 void loop() {
   // Read from Serial1 (external device)
+  String in = Serial1.readStringUntil('\n');
+   
   if (deviceConnected) {    
-    String in = Serial1.readStringUntil('\n');
-    Serial.print("Received via UART1: ");
-    Serial.println(in); 
-
-    // Send data every second
-    pCharacteristic->setValue(in);
-    pCharacteristic->notify();
-
+    Serial.println("Device connected");
   }
+
+  // Send data every second
+  pCharacteristic->setValue(in);
+  pCharacteristic->notify();
+
+  Serial.print("Received via UART1: ");
+  Serial.println(in); 
 }
