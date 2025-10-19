@@ -2,110 +2,178 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import serial
-import joblib
+import serial.tools.list_ports
 
 NUM_SENSORS = 4
-max_points = 100  # how many points to show on plot
+max_points = 100  # how many points to keep in history (window length)
 
 # ==============================
-# Ask user whether to use regression
-# ==============================
-use_model_input = input("Use calibration model? (y/n): ").strip().lower()
-use_model = use_model_input == 'y'
-
-# ==============================
-# Load models if needed
-# ==============================
-if use_model:
-    normal_model = joblib.load("normal_data_linear_model.pkl")
-    shear_model = joblib.load("shear_data_linear_model.pkl")
-    print("Loaded Normal and Shear models.")
-
-# ==============================
-# Setup serial connection
+# Setup serial connection (or FakeSerial for testing)
 # ==============================
 class FakeSerial:
-    def __init__(self):
+    def __init__(self, mode=None):
+        # mode: None -> alternate lines with a leading mode flag (old behavior)
+        #       0 or 1 -> always produce values only for that port (no leading mode)
         self.counter = 0
-    def readline(self):
-        mode = self.counter % 2
-        values = np.random.randint(1, 100, NUM_SENSORS)
-        self.counter += 1
-        time.sleep(0.1)
-        return (f"{mode}," + ",".join(map(str, values)) + "\n").encode("utf-8")
+        self.fixed_mode = mode
 
-try:
-    ser = serial.Serial("COM6", 9600, timeout=1)
-except:
-    print("Using FakeSerial() for testing")
-    ser = FakeSerial()
+    def readline(self):
+        values = np.random.randint(1, 100, NUM_SENSORS)
+        time.sleep(0.02)
+        if self.fixed_mode is None:
+            mode = self.counter % 2
+            self.counter += 1
+            return (f"{mode}," + ",".join(map(str, values)) + "\n").encode("utf-8")
+        else:
+            return (",".join(map(str, values)) + "\n").encode("utf-8")
+
+def open_serial(preferred_port="COM6", baud=9600, timeout=0.01, fake_mode=None):
+    try:
+        ser = serial.Serial(preferred_port, baud, timeout=timeout)
+        print(f"Connected to {preferred_port}")
+        return ser
+    except Exception:
+        ports = [p.device for p in serial.tools.list_ports.comports()]
+        for p in ports:
+            try:
+                ser = serial.Serial(p, baud, timeout=timeout)
+                print(f"Connected to {p}")
+                return ser
+            except Exception:
+                continue
+    print("Using FakeSerial() for testing (mode={})".format(fake_mode))
+    return FakeSerial(mode=fake_mode)
+
+# Open a single serial on COM6
+ser = open_serial(preferred_port="COM6", baud=9600, timeout=0.01, fake_mode=None)
 
 # ==============================
-# Setup plot
+# Setup plots: separate figs for normal and shear
 # ==============================
 plt.ion()
-fig, ax = plt.subplots()
+fig_norm, ax_norm = plt.subplots()
+fig_shear, ax_shear = plt.subplots()
 
-# Set y-limits based on mode
-if use_model:
-    ax.set_ylim(-10, 10)       # calibrated FT values
-else:
-    ax.set_ylim(0, 110)        # raw capacitance values
+for ax in (ax_norm, ax_shear):
+    ax.set_xlim(0, max_points)
+    ax.set_xlabel("Sample")
+    ax.set_ylabel("Capacitance")
+    ax.grid(True)
 
-ax.set_xlim(0, max_points)
-ax.set_xlabel("Sample")
-ax.set_ylabel("Force / Torque / Capacitance")
+plot_keys = [f"C{i+1}" for i in range(NUM_SENSORS)]
 
-# Choose plot keys
-if use_model:
-    plot_keys = ["Fx", "Fy", "Fz", "Tx", "Ty", "Tz"]
-else:
-    plot_keys = ["C1", "C2", "C3", "C4"]
-
-lines = {}
+lines_norm = {}
+lines_shear = {}
 for key in plot_keys:
-    lines[key] = ax.plot([], [], label=key)[0]
-ax.legend()
-history = {key: [] for key in plot_keys}
+    lines_norm[key] = ax_norm.plot([], [], label=key)[0]
+    lines_shear[key] = ax_shear.plot([], [], label=key)[0]
+
+ax_norm.legend(loc="upper right")
+ax_shear.legend(loc="upper right")
+fig_norm.suptitle("Normal Data")
+fig_shear.suptitle("Shear Data")
+
+history_norm = {key: [] for key in plot_keys}
+history_shear = {key: [] for key in plot_keys}
+
+# Helper to parse a line robustly:
+def parse_line_to_values(line):
+    # returns (mode_hint, values) where mode_hint is None, 0, or 1
+    parts = [p.strip() for p in line.split(",") if p.strip() != ""]
+    if len(parts) >= NUM_SENSORS + 1:
+        try:
+            mode_flag = int(parts[0])
+            mode_flag = 0 if mode_flag == 0 else 1
+            values = list(map(float, parts[1:1 + NUM_SENSORS]))
+            return mode_flag, values
+        except Exception:
+            pass
+    if len(parts) >= NUM_SENSORS:
+        try:
+            values = list(map(float, parts[0:NUM_SENSORS]))
+            return None, values
+        except Exception:
+            pass
+    return None, None
+
+def autoscale_axis_from_history(ax, histories, current_len):
+    # histories: dict of lists
+    if current_len == 0:
+        return
+    vals = []
+    for lst in histories.values():
+        vals.extend(lst)
+    if not vals:
+        return
+    y_min = min(vals)
+    y_max = max(vals)
+    # ensure a non-zero pad
+    if y_min == y_max:
+        pad = max(abs(y_min) * 0.05, 1.0)
+    else:
+        pad = (y_max - y_min) * 0.1
+    ax.set_ylim(y_min - pad, y_max + pad)
+    ax.set_xlim(0, max(current_len, 1))
 
 # ==============================
-# Main loop
+# Main loop: read single serial and route by leading flag
 # ==============================
 try:
     while True:
-        line = ser.readline().decode("utf-8").strip()
-        if not line:
-            continue
+        updated_norm = False
+        updated_shear = False
 
+        # read from single port
         try:
-            parts = line.split(",")
-            mode_flag = int(parts[0])
-            C = np.array(list(map(float, parts[1:]))).reshape(1, -1)
-            if C.shape[1] != NUM_SENSORS:
-                continue
-        except:
-            continue
+            raw = ser.readline()
+        except Exception:
+            raw = b""
+        if raw:
+            try:
+                line = raw.decode("utf-8", errors="ignore").strip()
+            except Exception:
+                line = ""
+            if line:
+                print("RECV:", line, flush=True)
+                mode_hint, values = parse_line_to_values(line)
+                if values is not None:
+                    # If mode_hint == 1 -> shear, mode_hint == 0 -> normal
+                    # If no mode hint (None), treat as normal by default
+                    if mode_hint == 1:
+                        for i, key in enumerate(plot_keys):
+                            history_shear[key].append(values[i])
+                            if len(history_shear[key]) > max_points:
+                                history_shear[key].pop(0)
+                        updated_shear = True
+                    else:
+                        for i, key in enumerate(plot_keys):
+                            history_norm[key].append(values[i])
+                            if len(history_norm[key]) > max_points:
+                                history_norm[key].pop(0)
+                        updated_norm = True
 
-        # Determine data to plot
-        if use_model:
-            if mode_flag == 0:
-                data = normal_model.predict(C)[0]
-            else:
-                data = shear_model.predict(C)[0]
-        else:
-            data = C[0]  # raw capacitance values
+        # Update normal plot if changed
+        if updated_norm:
+            current_len = len(history_norm[plot_keys[0]])
+            x = list(range(current_len))
+            for key in plot_keys:
+                lines_norm[key].set_data(x, history_norm[key])
+            autoscale_axis_from_history(ax_norm, history_norm, current_len)
+            fig_norm.canvas.draw()
+            fig_norm.canvas.flush_events()
 
-        # Update history
-        for i, key in enumerate(plot_keys):
-            history[key].append(data[i])
-            if len(history[key]) > max_points:
-                history[key].pop(0)
+        # Update shear plot if changed
+        if updated_shear:
+            current_len = len(history_shear[plot_keys[0]])
+            x = list(range(current_len))
+            for key in plot_keys:
+                lines_shear[key].set_data(x, history_shear[key])
+            autoscale_axis_from_history(ax_shear, history_shear, current_len)
+            fig_shear.canvas.draw()
+            fig_shear.canvas.flush_events()
 
-        # Update plot
-        for key in plot_keys:
-            lines[key].set_data(range(len(history[key])), history[key])
-        ax.set_xlim(0, max(len(history[plot_keys[0]]), max_points))
-        plt.pause(0.01)
+        # small sleep to avoid 100% CPU
+        time.sleep(0.001)
 
 except KeyboardInterrupt:
     print("\nStopped real-time visualization")
