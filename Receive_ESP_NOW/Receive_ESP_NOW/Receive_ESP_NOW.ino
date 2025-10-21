@@ -11,6 +11,15 @@
 // Char to receive data
 char inChar;
 
+///////////////////////////////////
+// UART1 pins for the ESP32-S3 - only if functioning in single ESP mode
+#define RXD1 18 // A0
+#define TXD1 17 // A1 but transmit to PSoC not implemented yet
+
+char outChar;
+
+//////////////////////////////////////
+
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&inChar, incomingData, sizeof(inChar));
@@ -82,8 +91,24 @@ void setup() {
   // Once ESPNow is successfully Init, we will register for recv CB to
   // get recv packer info
   esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+
+
+  // Only for single ESP mode
+  Serial1.begin(9600, SERIAL_8N1, RXD1, TXD1); // 8 data, no parity, 1 stop bit
+
+
 }
  
 void loop() {
+
+  if (Serial1.available()) {
+    outChar = Serial1.read();
+    //Serial.print("Received via UART1: ");
+
+    // Send message via ESP-NOW
+    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outChar, sizeof(outChar));
+    
+    if (result == ESP_OK) {
+      Serial.println("Sent with success");
 
 }

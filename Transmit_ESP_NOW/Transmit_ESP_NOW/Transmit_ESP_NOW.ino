@@ -28,7 +28,7 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
  
 void setup() {
   // Init Serial Monitor
-  Serial.begin(115200);
+  Serial.begin(9600);
  
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
@@ -72,6 +72,8 @@ void loop() {
     }
     else {
       Serial.println("Error sending the data");
+      Serial.println(outChar);
+
     }
     
   }
