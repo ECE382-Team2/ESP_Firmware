@@ -23,13 +23,13 @@ esp_now_peer_info_t peerInfo;
 
 // callback when data is sent
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  // Serial.print("\r\nLast Packet Send Status:\t");
+  // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
  
 void setup() {
   // Init Serial Monitor
-  Serial.begin(115200);
+  Serial.begin(9600);
  
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
@@ -72,11 +72,11 @@ void loop() {
       Serial.println("Sent with success");
     }
     else {
-      Serial.println("Error sending the data");
+      //Serial.println("Error sending the data");
+      Serial.print(outChar);
+
     }
     
-  } else {
-    Serial.println("Not available");
-  }
+  } 
 
-}
+  } 

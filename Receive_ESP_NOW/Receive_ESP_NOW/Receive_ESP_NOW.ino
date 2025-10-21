@@ -11,6 +11,19 @@
 // Char to receive data
 char inChar;
 
+///////////////////////////////////
+// UART1 pins for the ESP32-S3 - only if functioning in single ESP mode
+#define RXD1 41 // A0
+#define TXD1 40 // A1 but transmit to PSoC not implemented yet
+
+char outChar;
+
+HardwareSerial mySerial(2);
+
+bool singleMode = false;
+
+//////////////////////////////////////
+
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&inChar, incomingData, sizeof(inChar));
@@ -68,7 +81,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
  
 void setup() {
   // Initialize Serial Monitor
-  Serial.begin(115200);
+  Serial.begin(9600);
   
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
@@ -82,8 +95,26 @@ void setup() {
   // Once ESPNow is successfully Init, we will register for recv CB to
   // get recv packer info
   esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+
+
+  // Only for single ESP mode
+  mySerial.begin(9600, SERIAL_8N1, RXD1, TXD1); // 8 data, no parity, 1 stop bit
+
+
 }
  
 void loop() {
+
+  if (mySerial.available()) {
+    outChar = mySerial.read();
+    //Serial.print("Received via UART1: ");
+  
+    Serial.print(outChar);
+
+    singleMode = true; // Separate from transmitter if in single mode
+  }
+
+  if (singleMode)
+    esp_now_deinit();
 
 }
