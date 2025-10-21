@@ -8,9 +8,10 @@
 #include <WiFi.h>
 
 // UART1 pins for the ESP32-S3
-#define RXD1 18 // A0
-#define TXD1 17 // A1 but transmit to PSoC not implemented yet
+#define RXD1 41 // A0
+#define TXD1 40 // A1 but transmit to PSoC not implemented yet
 
+HardwareSerial mySerial(2);
 
 // REPLACE WITH YOUR RECEIVER MAC Address
 uint8_t broadcastAddress[] = {0xb4, 0x3a, 0x45, 0xb0, 0xca, 0x5c}; // ESP with duct tape  receives
@@ -22,8 +23,8 @@ esp_now_peer_info_t peerInfo;
 
 // callback when data is sent
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  // Serial.print("\r\nLast Packet Send Status:\t");
+  // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
  
 void setup() {
@@ -55,13 +56,13 @@ void setup() {
   }
 
   
-  Serial1.begin(9600, SERIAL_8N1, RXD1, TXD1); // 8 data, no parity, 1 stop bit
+  mySerial.begin(9600, SERIAL_8N1, RXD1, TXD1); // 8 data, no parity, 1 stop bit
 }
  
 void loop() {  
 
-  if (Serial1.available()) {
-    outChar = Serial1.read();
+  if (mySerial.available()) {
+    outChar = mySerial.read();
     //Serial.print("Received via UART1: ");
 
     // Send message via ESP-NOW
@@ -71,11 +72,11 @@ void loop() {
       Serial.println("Sent with success");
     }
     else {
-      Serial.println("Error sending the data");
-      Serial.println(outChar);
+      //Serial.println("Error sending the data");
+      Serial.print(outChar);
 
     }
     
-  }
+  } 
 
 }

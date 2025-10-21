@@ -20,6 +20,8 @@ char outChar;
 
 HardwareSerial mySerial(2);
 
+bool singleMode = false;
+
 //////////////////////////////////////
 
 // callback function that will be executed when data is received
@@ -79,7 +81,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
  
 void setup() {
   // Initialize Serial Monitor
-  Serial.begin(115200);
+  Serial.begin(9600);
   
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
@@ -108,6 +110,11 @@ void loop() {
     //Serial.print("Received via UART1: ");
   
     Serial.print(outChar);
+
+    singleMode = true; // Separate from transmitter if in single mode
   }
+
+  if (singleMode)
+    esp_now_deinit();
 
 }
