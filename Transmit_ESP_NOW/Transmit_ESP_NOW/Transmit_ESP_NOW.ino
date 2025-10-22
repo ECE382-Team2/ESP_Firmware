@@ -7,6 +7,8 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
+//#define PRINT_SEND // define to print send status messages to serial
+
 // UART1 pins for the ESP32-S3
 #define RXD1 41 // A0
 #define TXD1 40 // A1 but transmit to PSoC not implemented yet
@@ -23,8 +25,10 @@ esp_now_peer_info_t peerInfo;
 
 // callback when data is sent
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
-  // Serial.print("\r\nLast Packet Send Status:\t");
-  // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+    #ifdef PRINT_SEND
+    Serial.print("\r\nLast Packet Send Status:\t");
+    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+    #endif
 }
  
 void setup() {
@@ -63,19 +67,27 @@ void loop() {
 
   if (mySerial.available()) {
     outChar = mySerial.read();
-    //Serial.print("Received via UART1: ");
+    #ifdef PRINT_SEND
+    Serial.print("Received via UART1: ");
+    #endif
 
     // Send message via ESP-NOW
     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outChar, sizeof(outChar));
     
     if (result == ESP_OK) {
-      Serial.println("Sent with success");
+        #ifdef PRINT_SEND
+        Serial.println("Sent with success");      
+        #endif
+
     }
     else {
       //Serial.println("Error sending the data");
       Serial.print(outChar);
 
     }
+    #ifndef PRINT_SEND
+    Serial.print(outChar);
+    #endif
     
   } 
 
