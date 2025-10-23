@@ -29,7 +29,7 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
  
 void setup() {
   // Init Serial Monitor
-  Serial.begin(9600);
+  Serial.begin(115200);
  
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
@@ -56,7 +56,7 @@ void setup() {
   }
 
   
-  mySerial.begin(9600, SERIAL_8N1, RXD1, TXD1); // 8 data, no parity, 1 stop bit
+  mySerial.begin(115200, SERIAL_8N1, RXD1, TXD1); // 8 data, no parity, 1 stop bit
 }
  
 void loop() {  
