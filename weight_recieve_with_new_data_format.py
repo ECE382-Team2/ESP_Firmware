@@ -145,7 +145,7 @@ max_points = 100  # how many points to show on plot
 # ==============================
 # Sensor Weights
 # ==============================
-# Adjust these numbers to scale each sensor’s contribution
+# Adjust these numbers to scale each sensor's contribution
 sensor_weights = np.array([
     [3.046183461811196e-07, 3.915173383998768e-01, 4.919275893827008e-01, 1.814119519290021e-01, -7.229482869826916e-03, -1.815187667211892e+00, 2.737244577593229e-01, -5.299132964183279e-01],
     [2.305747385103482e-06, 1.953131646367295e-02, 2.351761635323825e-01, 7.055264424244227e-02, -2.410359779319578e-02, -1.290470723448289e+01, 1.831255948179031e+00, 3.597199040086411e-01],
@@ -208,7 +208,7 @@ fig, ax = plt.subplots()
 if use_model:
     ax.set_ylim(-10000, 10000)       # calibrated FT values
 else:
-    ax.set_ylim(-20000, 10000) # raw capacitance values
+    ax.set_ylim(-400, 400) # raw capacitance values
 
 ax.set_xlim(0, max_points)
 ax.set_xlabel("Sample")
@@ -241,13 +241,13 @@ try:
 
         try:
             parts = line.split(",")
-            vals = list(map(float, parts))
+            vals = list(map(float, parts[1:]))  # Skip first element
             if len(vals) != NUM_SENSORS:
                 # skip malformed lines
                 continue
-            C = np.array(vals).reshape(1, -1)
+            C = np.array(vals)
             if first_run:
-                C_init = C[0].copy()
+                C_init = C.copy()
                 first_run = False
         except:
             continue
@@ -256,11 +256,12 @@ try:
         if use_model:
             # pred = normal_model.predict(C)
             # data = np.array(pred[0])  # expect length 6
-            ft_values = calculate_ft_from_psoc(*C[0])
+            ft_values = calculate_ft_from_psoc(*C)
             data = ft_values
         else:
             # raw capacitance delta -> length NUM_SENSORS
-            data = (C[0] - C_init) * np.array([0, 0, 0, 0, 0, 0, 0, 1])
+            data = (C - C_init) * np.array([0, 0, 0, 0, 1, 1, 1, 1])
+            # data = (C - C_init)
 
         # Update history safely (handle mismatched lengths)
         n_plot = len(plot_keys)
