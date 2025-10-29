@@ -3,7 +3,61 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import CheckButtons
 import serial
+import serial.tools.list_ports
 # import joblib
+
+def detect_serial_port():
+    """
+    Auto-detect available serial ports and return the most likely candidate.
+    Returns the port name or prompts user to select if multiple ports found.
+    """
+    ports = list(serial.tools.list_ports.comports())
+    
+    # Filter out ttyS ports (not typically used for ESP devices)
+    ports = [port for port in ports if not port.device.startswith('/dev/ttyS')]
+    
+    if not ports:
+        print("No serial ports found!")
+        return None
+    
+    print(f"Found {len(ports)} serial port(s):")
+    for i, port in enumerate(ports):
+        print(f"  {i+1}: {port.device} - {port.description}")
+    
+    if len(ports) == 1:
+        # Only one port, use it automatically
+        selected_port = ports[0].device
+        print(f"Auto-selected: {selected_port}")
+        return selected_port
+    else:
+        # Multiple ports, let user choose
+        while True:
+            try:
+                choice = input(f"Select port (1-{len(ports)}): ").strip()
+                idx = int(choice) - 1
+                if 0 <= idx < len(ports):
+                    selected_port = ports[idx].device
+                    print(f"Selected: {selected_port}")
+                    return selected_port
+                else:
+                    print(f"Please enter a number between 1 and {len(ports)}")
+            except (ValueError, EOFError):
+                print("Invalid input. Please enter a number.")
+
+# ==============================
+# Auto-detect serial port
+# ==============================
+SERIAL_PORT = detect_serial_port()
+if SERIAL_PORT is None:
+    print("No serial port available. Exiting.")
+    exit()
+
+print(f"Using serial port: {SERIAL_PORT}")
+
+# ==============================
+# predicition fucntion
+# ==============================
+
 # ==============================
 # predicition fucntion
 # ==============================
@@ -63,10 +117,6 @@ post_process = subtraction_shear
 # ==============================
 # Previous capacitance values for derivative calculation
 global sensor_data_map
-
-
-# SERIAL_PORT = '/dev/ttyACM0'  # serial port to connect to
-SERIAL_PORT = 'COM7'            # Windows COM port
 
 # Track when to update plot structure (after 2s, then every .05s)
 last_plot_update = time.time() + 2.5
