@@ -288,20 +288,47 @@ def update_plot_structure():
                 lines_dict[mode][port] = ax.plot([], [], label=port, marker='', markersize=2, linewidth=1.5)[0]
                 visibility_dict[mode][port] = True  # Start with all visible
             
-            # Create checkboxes
+            # Create checkboxes with larger spacing to accommodate bigger boxes
             checkbox_labels = ports_in_mode
             checkbox_states = [True] * len(checkbox_labels)  # All initially checked
             
             checkbox_dict[mode] = CheckButtons(checkbox_ax, checkbox_labels, checkbox_states)
             
-            # Make checkboxes bigger
-            for rect in checkbox_dict[mode].rectangles:
-                rect.set_width(0.15)  # Increase checkbox width
-                rect.set_height(0.08)  # Increase checkbox height
+            # FORCE larger checkbox rectangles - try multiple approaches
+            try:
+                # Method 1: Direct rectangle modification
+                for i, rect in enumerate(checkbox_dict[mode].rectangles):
+                    # Get current position
+                    x, y = rect.get_xy()
+                    # Set much larger dimensions
+                    rect.set_width(0.08)  # Larger width in axes coordinates
+                    rect.set_height(0.08)  # Larger height in axes coordinates
+                    rect.set_xy((x, y))  # Ensure position is maintained
+                    
+                # Method 2: Also try setting linewidth to make border thicker
+                for rect in checkbox_dict[mode].rectangles:
+                    rect.set_linewidth(3)  # Thicker border
+                    
+            except AttributeError:
+                print(f"Warning: Could not access rectangles directly for {mode}")
+                
+            # Try alternative approach - modify the axes properties
+            try:
+                # Set the checkbox axes to have larger tick marks or modify spacing
+                checkbox_ax.tick_params(labelsize=16)
+            except:
+                pass
             
             # Make checkbox text larger
-            for text in checkbox_dict[mode].labels:
-                text.set_fontsize(12)
+            try:
+                for text in checkbox_dict[mode].labels:
+                    text.set_fontsize(16)  # Even larger font
+            except AttributeError:
+                try:
+                    for text in checkbox_dict[mode]._labels:
+                        text.set_fontsize(16)  # Even larger font
+                except AttributeError:
+                    print(f"Warning: Could not resize checkbox text for {mode} mode")
             
             # Set up callback with mode context
             def make_callback(mode):
