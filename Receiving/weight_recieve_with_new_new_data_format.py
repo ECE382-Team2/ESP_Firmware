@@ -133,7 +133,8 @@ def calculate_ft_from_psoc(c1n, c2n, c3n, c4n, c1s, c2s, c3s, c4s):
 global sensor_data_map
 
 
-SERIAL_PORT = '/dev/ttyACM0'  # serial port to connect to
+# SERIAL_PORT = '/dev/ttyACM0'  # serial port to connect to
+SERIAL_PORT = 'COM7'            # Windows COM port
 
 # Track when to update plot structure (after 2s, then every .05s)
 last_plot_update = time.time() + 2.5
