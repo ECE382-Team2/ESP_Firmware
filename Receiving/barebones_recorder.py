@@ -3,7 +3,8 @@ import os
 import serial
 import re
 
-SERIAL_PORT = '/dev/ttyACM0'  # serial port to connect to
+# SERIAL_PORT = '/dev/ttyACM0'  # serial port to connect to
+SERIAL_PORT = 'COM7'  # serial port to connect to
 CSV_HEADERS = ["Value", "Mode", "Port", "Timestamp Sent", "Timestamp Received"]
 
 
