@@ -50,18 +50,67 @@ def detect_serial_port():
 SERIAL_PORT = detect_serial_port()
 if SERIAL_PORT is None:
     print("No serial port available. Exiting.")
-    exit()
+    # exit()
 
 print(f"Using serial port: {SERIAL_PORT}")
 
 # ==============================
-# predicition fucntion
+# prediction function
 # ==============================
 
-# ==============================
-# predicition fucntion
-# ==============================
 
+import pickle
+from sklearn.preprocessing import PolynomialFeatures
+calibration_models = pickle.load(open('calibration/models.pkl', 'rb'))
+# Recreate the polynomial features transformer (since it wasn't saved)
+poly = PolynomialFeatures(degree=2, include_bias=True)
+
+def predict_forces(sensor_data_map, models, poly):
+    """
+    Predict forces/torques from sensor_data_map using the calibration models.
+    sensor_data_map: dict with 'normal' and 'shear' modes, each containing raw ports 
+                     '1a','1b','2a','2b','3a','3b','4a','4b' with 'values' lists
+    Returns: dict with keys 'fx','fy','fz','tx','ty','tz' and predicted values (arrays)
+    """
+    ports = ['1a', '1b', '2a', '2b', '3a', '3b', '4a', '4b']
+    modes = ['normal', 'shear']
+    
+    features = None
+    
+    # Iterate through modes and ports
+    for mode in modes:
+        if mode in sensor_data_map:
+            for port in ports:
+                if port in sensor_data_map[mode] and sensor_data_map[mode][port]['values']:
+                    col = np.array(sensor_data_map[mode][port]['values']).reshape(-1, 1)
+                    features = col if features is None else np.column_stack([features, col])
+    
+    timestamps = None
+    for mode in modes:
+        if mode in sensor_data_map:
+            for port in ports:
+                if port in sensor_data_map[mode] and sensor_data_map[mode][port].get('timestamps'):
+                    timestamps = sensor_data_map[mode][port]['timestamps']
+                    break
+            if timestamps:
+                break
+    # Transform and predict
+    features_poly = poly.transform(features)    
+        
+    # Predict for each output and structure results
+    predictions = {'f': {}, 't': {}}
+    
+    for name, model in models.items():
+        force_type = name[:-1]  # 'f' or 't'
+        axis = name[-1]         # 'x', 'y', or 'z'
+        
+        pred = model.predict(features_poly)
+        predictions[force_type][axis] = {
+            'values': pred.tolist(),
+            'timestamps': timestamps
+        }
+    
+    return predictions
 def subtraction_shear(data_map):
     """
     Convert shear data from individual ports (1a,1b,2a,2b,etc.) to combined ports (1,2,3,4)
@@ -107,10 +156,10 @@ def subtraction_shear(data_map):
             processed_map[mode] = ports.copy()
     
     return processed_map
-    
 
-post_process = subtraction_shear
 
+
+post_process = predict_forces
 
 # ==============================
 # Derivative shit that hopes the sensativity of the sensor is consistent
@@ -382,6 +431,8 @@ try:
                         data['values'] = data['values'][idx:]
 
             data_map = post_process(sensor_data_map)
+            predictions = predict_forces(sensor_data_map, calibration_models, poly)
+            print(f"Predictions: {predictions}")
             update_plot_structure(data_map)
             last_plot_update = current_time
         
