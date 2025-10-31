@@ -22,6 +22,7 @@
       scikit-learn
       notebook
       ipympl
+      pyserial
     ]))
         ];
     };
