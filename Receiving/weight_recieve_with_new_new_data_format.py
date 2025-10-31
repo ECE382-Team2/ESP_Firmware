@@ -65,7 +65,7 @@ calibration_models = pickle.load(open('calibration/models.pkl', 'rb'))
 # Recreate the polynomial features transformer (since it wasn't saved)
 poly = PolynomialFeatures(degree=2, include_bias=True)
 
-def predict_forces(sensor_data_map, models, poly):
+def predict_forces(sensor_data_map):
     """
     Predict forces/torques from sensor_data_map using the calibration models.
     sensor_data_map: dict with 'normal' and 'shear' modes, each containing raw ports 
@@ -74,16 +74,6 @@ def predict_forces(sensor_data_map, models, poly):
     """
     ports = ['1a', '1b', '2a', '2b', '3a', '3b', '4a', '4b']
     modes = ['normal', 'shear']
-    
-    features = None
-    
-    # Iterate through modes and ports
-    for mode in modes:
-        if mode in sensor_data_map:
-            for port in ports:
-                if port in sensor_data_map[mode] and sensor_data_map[mode][port]['values']:
-                    col = np.array(sensor_data_map[mode][port]['values']).reshape(-1, 1)
-                    features = col if features is None else np.column_stack([features, col])
     
     timestamps = None
     for mode in modes:
@@ -94,13 +84,37 @@ def predict_forces(sensor_data_map, models, poly):
                     break
             if timestamps:
                 break
+
+    # Build features array with exactly 16 columns (8 ports x 2 modes)
+    features_list = []
+    for mode in modes:
+        for port in ports:
+            col_values = []
+            for ts in timestamps:
+                if mode in sensor_data_map and port in sensor_data_map[mode] and sensor_data_map[mode][port]['values']:
+                    port_timestamps = sensor_data_map[mode][port]['timestamps']
+                    port_values = sensor_data_map[mode][port]['values']
+                    if port_timestamps:
+                        # Find index with nearest timestamp
+                        diffs = [abs(pts - ts) for pts in port_timestamps]
+                        min_idx = diffs.index(min(diffs))
+                        col_values.append(port_values[min_idx])
+                    else:
+                        col_values.append(0.0)
+                else:
+                    col_values.append(0.0)
+            features_list.append(np.array(col_values).reshape(-1, 1))
+    
+    features = np.column_stack(features_list)
+    
+
     # Transform and predict
-    features_poly = poly.transform(features)    
+    features_poly = poly.fit_transform(features)    
         
     # Predict for each output and structure results
     predictions = {'f': {}, 't': {}}
     
-    for name, model in models.items():
+    for name, model in calibration_models.items():
         force_type = name[:-1]  # 'f' or 't'
         axis = name[-1]         # 'x', 'y', or 'z'
         
@@ -159,6 +173,7 @@ def subtraction_shear(data_map):
 
 
 
+# post_process = lambda x: x
 post_process = predict_forces
 
 # ==============================
@@ -431,8 +446,6 @@ try:
                         data['values'] = data['values'][idx:]
 
             data_map = post_process(sensor_data_map)
-            predictions = predict_forces(sensor_data_map, calibration_models, poly)
-            print(f"Predictions: {predictions}")
             update_plot_structure(data_map)
             last_plot_update = current_time
         
@@ -466,11 +479,8 @@ try:
                         # Apply visibility setting
                         if mode in visibility_dict and port in visibility_dict[mode]:
                             line.set_visible(visibility_dict[mode][port])
-
-                # Trigger autoscaling for y-axis since data changed
                 ax.relim(visible_only=True)
                 ax.autoscale_view(tight=None, scalex = True, scaley=True)
-
                 # # Update x-axis limits to show rolling window
                 # ax.set_xlim(min_timestamp, last_absolute_timestamp)
         
