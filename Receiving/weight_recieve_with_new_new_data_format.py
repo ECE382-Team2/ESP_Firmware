@@ -125,6 +125,8 @@ def predict_forces(sensor_data_map):
         }
     
     return predictions
+
+
 def subtraction_shear(data_map):
     """
     Convert shear data from individual ports (1a,1b,2a,2b,etc.) to combined ports (1,2,3,4)
@@ -171,10 +173,63 @@ def subtraction_shear(data_map):
     
     return processed_map
 
+def bias(sensor_data_map):  
+    """
+    Subtract the initial bias (first reading) from each sensor's values.
+    Modifies sensor_data_map in place and also returns it.
+    """
+    # Maintain per-mode/port bias using globals, but do not mutate the input.
+    global _bias_values, _bias_initialized
 
+    if '_bias_values' not in globals():
+        _bias_values = {}
+    if '_bias_initialized' not in globals():
+        _bias_initialized = {}
+
+    # Work on a deep copy so the original map is untouched
+    out_map = {}
+
+    for mode, ports in sensor_data_map.items():
+        mode_bias = _bias_values.setdefault(mode, {})
+        mode_init = _bias_initialized.setdefault(mode, {})
+
+        for port, data in ports.items():
+            vals = data.get('values', [])
+            if not vals:
+                continue
+
+            if not mode_init.get(port, False):
+                # First observed value for this mode/port becomes the bias
+                mode_bias[port] = vals[0]
+                mode_init[port] = True
+
+            b = mode_bias[port]
+
+            # Populate the new dictionary with biased values
+            out_map.setdefault(mode, {})[port] = {
+                'timestamps': data.get('timestamps', []),
+                'values': [v - b for v in vals]
+            }
+
+    return out_map
 
 # post_process = lambda x: x
-post_process = predict_forces
+# post_process = predict_forces
+# post_process = lambda x: predict_forces(bias(x))
+
+# ==============================
+# Post-processing functions
+# ==============================
+def post_process(sensor_data_map):
+    """
+    Apply post-processing steps to sensor_data_map.
+    Currently applies shear subtraction and then force prediction.
+    """
+    biased_data = bias(sensor_data_map)
+    shear_processed = subtraction_shear(biased_data)
+    # predictions = predict_forces(shear_processed)
+    return shear_processed
+
 
 # ==============================
 # Derivative shit that hopes the sensativity of the sensor is consistent
