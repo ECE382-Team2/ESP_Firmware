@@ -14,7 +14,12 @@
 HardwareSerial mySerial(2);
 
 // REPLACE WITH YOUR RECEIVER MAC Address
-uint8_t broadcastAddress[] = {0xb4, 0x3a, 0x45, 0xb0, 0xca, 0x5c}; // ESP with duct tape  receives
+//uint8_t broadcastAddress[] = {0xb4, 0x3a, 0x45, 0xb0, 0xca, 0x5c}; // Purple ESP with duct tape  receives
+uint8_t broadcastAddress[] = {0x10, 0x20, 0xba, 0x32, 0x6c, 0x78}; // Black ESP with R1
+// uint8_t broadcastAddress[] = {0x10, 0x20, 0xba, 0x32, 0xb2, 0xd4}; // Black ESP with R2
+// uint8_t broadcastAddress[] = {0x10, 0x20, 0xba, 0x32, 0x7a, 0xe0}; // Steve
+
+
 
 // Char for transmitting data
 char outChar;

@@ -4,7 +4,7 @@
   Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files.
   The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 */
-
+// NOTE: If flashing on the black esp boards, still use the Adafruit QT Py ESP32-S3 (4M SRAM)
 #include <esp_now.h>
 #include <WiFi.h>
 
@@ -113,6 +113,7 @@ void loop() {
 
     singleMode = true; // Separate from transmitter if in single mode
   }
+
 
   if (singleMode)
     esp_now_deinit();
