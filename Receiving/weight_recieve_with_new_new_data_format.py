@@ -263,10 +263,6 @@ def bias(sensor_data_map):
 
     return out_map
 
-# post_process = lambda x: x
-# post_process = predict_forces
-# post_process = lambda x: predict_forces(bias(x))
-
 # ==============================
 # Post-processing functions
 # ==============================
@@ -499,6 +495,11 @@ def update_plot_structure(data_map):
 # ==============================
 # Declare global variable
 
+# specify what is getting sent to the visualizer
+# get_output_ready_data = lambda x: predict_forces_polynomial(post_process(x))
+# get_output_ready_data = lambda x: predict_forces_nn(post_process(x))
+get_output_ready_data = lambda x: post_process(x)
+
 print('starting')
 try:
     while True:
@@ -550,7 +551,7 @@ try:
                         data['timestamps'] = data['timestamps'][idx:]
                         data['values'] = data['values'][idx:]
 
-            data_map = post_process(sensor_data_map)
+            data_map = get_output_ready_data(sensor_data_map)
             update_plot_structure(data_map)
             last_plot_update = current_time
         
