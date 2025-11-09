@@ -59,22 +59,15 @@ print(f"Using serial port: {SERIAL_PORT}")
 # ==============================
 
 
-import pickle
-from sklearn.preprocessing import PolynomialFeatures
-calibration_models = pickle.load(open('calibration/models.pkl', 'rb'))
-# Recreate the polynomial features transformer (since it wasn't saved)
-poly = PolynomialFeatures(degree=2, include_bias=True)
-
-def predict_forces(sensor_data_map):
+def create_standard_feature_array(sensor_data_map):
     """
-    Predict forces/torques from sensor_data_map using the calibration models.
+    Create a standard feature array from sensor_data_map for given timestamps.
     sensor_data_map: dict with 'normal' and 'shear' modes, each containing raw ports 
                      '1a','1b','2a','2b','3a','3b','4a','4b' with 'values' lists
-    Returns: dict with keys 'fx','fy','fz','tx','ty','tz' and predicted values (arrays)
     """
     ports = ['1a', '1b', '2a', '2b', '3a', '3b', '4a', '4b']
     modes = ['normal', 'shear']
-    
+
     timestamps = None
     for mode in modes:
         if mode in sensor_data_map:
@@ -104,10 +97,27 @@ def predict_forces(sensor_data_map):
                 else:
                     col_values.append(0.0)
             features_list.append(np.array(col_values).reshape(-1, 1))
-    
-    features = np.column_stack(features_list)
-    
 
+    return (np.column_stack(features_list), timestamps)
+
+
+
+import pickle
+from sklearn.preprocessing import PolynomialFeatures
+# calibration_models = pickle.load(open('calibration/models.pkl', 'rb'))
+# Recreate the polynomial features transformer (since it wasn't saved)
+poly = PolynomialFeatures(degree=2, include_bias=True)
+
+def predict_forces_polynomial(sensor_data_map):
+    """
+    Predict forces/torques from sensor_data_map using the calibration models.
+    sensor_data_map: dict with 'normal' and 'shear' modes, each containing raw ports 
+                     '1a','1b','2a','2b','3a','3b','4a','4b' with 'values' lists
+    Returns: dict with keys 'fx','fy','fz','tx','ty','tz' and predicted values (arrays)
+    """
+    # combine data to make single array with timestamps
+    features, timestamps = create_standard_feature_array(sensor_data_map)
+    
     # Transform and predict
     features_poly = poly.fit_transform(features)    
         
@@ -126,6 +136,46 @@ def predict_forces(sensor_data_map):
     
     return predictions
 
+import torch
+def predict_forces_nn(sensor_data_map):
+    """
+    Predict forces/torques from sensor_data_map using the neural network model.
+    sensor_data_map: dict with 'normal' and 'shear' modes, each containing raw ports 
+                     '1a','1b','2a','2b','3a','3b','4a','4b' with 'values' lists
+    """
+    import torch.nn as nn
+
+    # Load the neural network model
+    nn_model = torch.load('calibration/nn_model.pth')
+    nn_model.eval()
+
+    # combine data to make single array with timestamps
+    features, timestamps = create_standard_feature_array(sensor_data_map)
+
+    # Convert to PyTorch tensor
+    features_tensor = torch.FloatTensor(features)
+
+    # Predict with neural network
+    with torch.no_grad():
+        predictions_tensor = nn_model(features_tensor)
+
+    # Convert predictions to numpy
+    predictions_np = predictions_tensor.numpy()
+
+    # Structure results (assuming model outputs 6 values: fx, fy, fz, tx, ty, tz)
+    predictions = {'f': {}, 't': {}}
+    output_names = ['fx', 'fy', 'fz', 'tx', 'ty', 'tz']
+
+    for i, name in enumerate(output_names):
+        force_type = name[0]  # 'f' or 't'
+        axis = name[1]        # 'x', 'y', or 'z'
+        
+        predictions[force_type][axis] = {
+            'values': predictions_np[:, i].tolist(),
+            'timestamps': timestamps
+        }
+
+    return predictions
 
 def subtraction_shear(data_map):
     """
