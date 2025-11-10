@@ -6,6 +6,12 @@ import serial
 import serial.tools.list_ports
 # import joblib
 
+import torch
+import torch.nn as nn
+# Load the neural network model
+nn_model = torch.load('ESP_Firmware/calibration/nn_model.pth')
+nn_model.eval()
+
 def detect_serial_port():
     """
     Auto-detect available serial ports and return the most likely candidate.
@@ -136,18 +142,12 @@ def predict_forces_polynomial(sensor_data_map):
     
     return predictions
 
-import torch
 def predict_forces_nn(sensor_data_map):
     """
     Predict forces/torques from sensor_data_map using the neural network model.
     sensor_data_map: dict with 'normal' and 'shear' modes, each containing raw ports 
                      '1a','1b','2a','2b','3a','3b','4a','4b' with 'values' lists
     """
-    import torch.nn as nn
-
-    # Load the neural network model
-    nn_model = torch.load('calibration/nn_model.pth')
-    nn_model.eval()
 
     # combine data to make single array with timestamps
     features, timestamps = create_standard_feature_array(sensor_data_map)
@@ -497,8 +497,8 @@ def update_plot_structure(data_map):
 
 # specify what is getting sent to the visualizer
 # get_output_ready_data = lambda x: predict_forces_polynomial(post_process(x))
-# get_output_ready_data = lambda x: predict_forces_nn(post_process(x))
-get_output_ready_data = lambda x: post_process(x)
+get_output_ready_data = lambda x: predict_forces_nn(post_process(x))
+# get_output_ready_data = lambda x: post_process(x)
 
 print('starting')
 try:
