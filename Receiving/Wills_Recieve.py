@@ -4,63 +4,18 @@ import matplotlib.pyplot as plt
 import serial
 import joblib
 
+first_run = True
 
-# ==============================
-# Derivative shit that hopes the sensativity of the sensor is consistent
-# ==============================
-# Previous capacitance values for derivative calculation
-C1_prev = 0
-C2_prev = 0
-C3_prev = 0
-C4_prev = 0
-
-# Accumulated values from derivatives
-C1_accum = 0
-C2_accum = 0
-C3_accum = 0
-C4_accum = 0
-
-first_run = True    
-
-def update_derivatives(C_current):
-    """
-    Compute derivatives and update accumulated values.
-    
-    Args:
-        C_current: numpy array of current capacitance values [C1, C2, C3, C4]
-    
-    Returns:
-        numpy array of accumulated values
-    """
-    global C1_prev, C2_prev, C3_prev, C4_prev
-    global C1_accum, C2_accum, C3_accum, C4_accum
-    global first_run
-
-    if first_run:
-        C1_prev, C2_prev, C3_prev, C4_prev = C_current
+def process(data):
+    global first_run 
+    global biases
+    if (first_run):
         first_run = False
+        biases = data.copy()
 
-    # Calculate derivatives (change from previous reading)
-    dC1 = C_current[0] - C1_prev
-    dC2 = C_current[1] - C2_prev
-    dC3 = C_current[2] - C3_prev
-    dC4 = C_current[3] - C4_prev
-    
-    # Accumulate the changes
-    C1_accum += dC1
-    C2_accum += dC2
-    C3_accum += dC3
-    C4_accum += dC4
-    
-    # Update previous values for next iteration
-    C1_prev = C_current[0]
-    C2_prev = C_current[1]
-    C3_prev = C_current[2]
-    C4_prev = C_current[3]
-    
-    return np.array([C1_accum, C2_accum, C3_accum, C4_accum])
+    return (data - biases)
 
-NUM_SENSORS = 4
+NUM_SENSORS = 16
 max_points = 100  # how many points to show on plot
 
 # ==============================
@@ -91,7 +46,7 @@ class FakeSerial:
         return (f"{mode}," + ",".join(map(str, values)) + "\n").encode("utf-8")
 
 try:
-    ser = serial.Serial("COM5", 9600, timeout=1)
+    ser = serial.Serial("COM7", 115200, timeout=1)
 except:
     print("Using FakeSerial() for testing")
     ser = FakeSerial()
@@ -116,7 +71,7 @@ ax.set_ylabel("Force / Torque / Capacitance")
 if use_model:
     plot_keys = ["Fx", "Fy", "Fz", "Tx", "Ty", "Tz"]
 else:
-    plot_keys = ["C1", "C2", "C3", "C4"]
+    plot_keys = ["C1", "C2", "C3", "C4","C5", "C6", "C7", "C8","C9", "C10", "C11", "C12", "C13", "C14", "C15", "C16"]
 
 lines = {}
 for key in plot_keys:
@@ -135,8 +90,9 @@ try:
 
         try:
             parts = line.split(",")
-            mode_flag = int(parts[0])
-            C = np.array(list(map(float, parts[1:]))).reshape(1, -1)
+            # mode_flag = int(parts[0])
+            C = np.array(list(map(int, parts))).reshape(1, -1)
+            
             if C.shape[1] != NUM_SENSORS:
                 continue
         except:
@@ -144,15 +100,9 @@ try:
 
         # Determine data to plot
         if use_model:
-            if mode_flag == 0:
-                data = normal_model.predict(C)[0]
-            else:
-                data = shear_model.predict(C)[0]
+            data = normal_model.predict(C)[0]
         else:
-            if mode_flag == 0:
-                data = C[0]  # raw capacitance values
-                # Will's Derivative stuff
-                data = update_derivatives(data)
+            data = process(C[0])  # raw capacitance values
 
         # Update history
         for i, key in enumerate(plot_keys):
