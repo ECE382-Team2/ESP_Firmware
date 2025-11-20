@@ -38,6 +38,8 @@ def process(data, use_model=False):
         first_run = False
         biases = data.copy()
 
+    biases = 0.999 * biases + 0.001 * data  # Update biases with moving average
+
     biased_data = (data - biases)
 
     if use_model:
