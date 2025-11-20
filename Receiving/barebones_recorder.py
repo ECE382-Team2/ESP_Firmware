@@ -4,7 +4,7 @@ import serial
 import re
 
 # SERIAL_PORT = '/dev/ttyACM0'  # serial port to connect to
-SERIAL_PORT = 'COM7'  # serial port to connect to
+SERIAL_PORT = 'COM5'  # serial port to connect to
 CSV_HEADERS = ["Value", "Mode", "Port", "Timestamp Sent", "Timestamp Received"]
 
 
@@ -12,7 +12,7 @@ CSV_HEADERS = ["Value", "Mode", "Port", "Timestamp Sent", "Timestamp Received"]
 # Setup serial connection
 # ================================================================
 try:
-    ser = serial.Serial(SERIAL_PORT, baudrate=921600,timeout=1)
+    ser = serial.Serial(SERIAL_PORT, baudrate=115200,timeout=1)
     print(f"Connected to {SERIAL_PORT}")
 except Exception as e:
     print(f"{e}\nCannot find serial port {SERIAL_PORT}")
@@ -43,7 +43,9 @@ print(f"\nCollecting data for {N} seconds...")
 # ================================================================
 start_time = time.time()
 samples_collected = 0
-ser.readline()
+
+ser.reset_input_buffer() 
+ser.readline() # Discard one line to avoid partial reads
 
 while time.time() - start_time < N:
     try:
