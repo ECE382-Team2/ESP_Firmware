@@ -1,31 +1,65 @@
+import pickle
 import time
+from xml.parsers.expat import model
 import numpy as np
 import matplotlib.pyplot as plt
 import serial
 import joblib
 from collections import deque
 
+from sklearn.preprocessing import PolynomialFeatures
 import torch
 import torch.nn as nn
 
+######### neural network approach ##########
+# Define the neural network
 class ForceNet(nn.Module):
     def __init__(self):
         super(ForceNet, self).__init__()
-        self.fc1 = nn.Linear(16, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 6)
+        self.fc1 = nn.Linear(16, 16)
+        self.fc2 = nn.Linear(16, 32)
+        self.fc3 = nn.Linear(32, 32)
+        self.fc4 = nn.Linear(32, 6)
         self.relu = nn.ReLU()
-    
+
     def forward(self, x):
         x = self.relu(self.fc1(x))
         x = self.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = self.relu(self.fc3(x))
+        x = self.fc4(x)
         return x
     
-model = ForceNet()
+nn_model = ForceNet()
 # Note: this path only works if your working directory is Tactile. Otherwise, you might need to delete the ESP_Firmware part
-model.load_state_dict(torch.load('ESP_Firmware/calibration/nn_model', weights_only=True))
-model.eval()
+nn_model.load_state_dict(torch.load('ESP_Firmware/calibration/nn_model', weights_only=True))
+nn_model.eval()
+
+def nn_predict(X):
+    with torch.no_grad():
+        input_tensor = torch.FloatTensor(X).unsqueeze(0)  # Add batch dimension
+        output_tensor = nn_model(input_tensor)
+        output = output_tensor.squeeze(0).numpy()  # Remove batch dimension
+    return output  # Fx, Fy, Fz, Tx, Ty, Tz
+
+
+######### polynomial regression approach ##########
+poly_model = pickle.load(open('ESP_Firmware/calibration/models.pkl', 'rb'))
+poly = PolynomialFeatures(degree=2, include_bias=True)
+
+def polynomial_predict(X):
+    # Load the polynomial models
+    poly_features = poly.fit_transform(X.reshape(1, -1))
+
+    # Predict forces and torques
+    output = np.zeros(6)
+    force_torque_names = ['fx', 'fy', 'fz', 'tx', 'ty', 'tz']
+
+    for i, name in enumerate(force_torque_names):
+        if name in poly_model:
+            output[i] = poly_model[name].predict(poly_features)[0]
+
+    return output
+
 
 # Here is where all of the processing happens before you send data out
 first_run = True
@@ -43,11 +77,8 @@ def process(data, use_model=False):
     biased_data = (data - biases)
 
     if use_model:
-        with torch.no_grad():
-            input_tensor = torch.FloatTensor(biased_data).unsqueeze(0)  # Add batch dimension
-            output_tensor = model(input_tensor)
-            output = output_tensor.squeeze(0).numpy()  # Remove batch dimension
-        return output  # Fx, Fy, Fz, Tx, Ty, Tz
+        # return polynomial_predict(biased_data)
+        return nn_predict(biased_data)
     else:
         return biased_data
 
