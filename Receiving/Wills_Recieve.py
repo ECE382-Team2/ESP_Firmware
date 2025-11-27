@@ -11,23 +11,69 @@ from sklearn.preprocessing import PolynomialFeatures
 import torch
 import torch.nn as nn
 
-######### neural network approach ##########
-# Define the neural network
+# Define the neural network with two heads
 class ForceNet(nn.Module):
     def __init__(self):
         super(ForceNet, self).__init__()
-        self.fc1 = nn.Linear(16, 16)
-        self.fc2 = nn.Linear(16, 32)
-        self.fc3 = nn.Linear(32, 32)
-        self.fc4 = nn.Linear(32, 6)
+        # Head 1: processes first 8 elements + previous outputs, outputs fx, tx, ty
+        self.head1_fc1 = nn.Linear(8 + 3, 32)  # 8 inputs + 3 previous outputs (fx, tx, ty)
+        self.head1_fc2 = nn.Linear(32, 32)
+        self.head1_fc3 = nn.Linear(32, 32)
+        self.head1_fc4 = nn.Linear(32, 3)  # outputs [fx, tx, ty]
+        
+        # Head 2: processes second 8 elements + previous outputs, outputs fz, fy, tz
+        self.head2_fc1 = nn.Linear(8 + 3, 32)  # 8 inputs + 3 previous outputs (fz, fy, tz)
+        self.head2_fc2 = nn.Linear(32, 32)
+        self.head2_fc3 = nn.Linear(32, 32)
+        self.head2_fc4 = nn.Linear(32, 3)  # outputs [fz, fy, tz]
+        
         self.relu = nn.ReLU()
 
+        # Previous outputs - will be expanded to match batch size
+        self.prev_head1_out = None  # Previous [fx, tx, ty]
+        self.prev_head2_out = None  # Previous [fz, fy, tz]
+
     def forward(self, x):
-        x = self.relu(self.fc1(x))
-        x = self.relu(self.fc2(x))
-        x = self.relu(self.fc3(x))
-        x = self.fc4(x)
-        return x
+        batch_size = x.shape[0]
+        
+        # Initialize previous outputs if needed (first forward pass)
+        if self.prev_head1_out is None or self.prev_head1_out.shape[0] != batch_size:
+            self.prev_head1_out = torch.zeros(batch_size, 3, device=x.device)
+            self.prev_head2_out = torch.zeros(batch_size, 3, device=x.device)
+        
+        # Split input: first 8 elements and second 8 elements
+        x1 = x[:, :8]   # First 8 elements
+        x2 = x[:, 8:]   # Second 8 elements
+
+        # Head 1 forward pass (with previous fx, tx, ty)
+        h1_input = torch.cat([x1, self.prev_head1_out], dim=1)
+        h1 = self.relu(self.head1_fc1(h1_input))
+        h1 = self.relu(self.head1_fc2(h1))
+        h1 = self.relu(self.head1_fc3(h1))
+        h1_out = self.head1_fc4(h1)  # [fx, tx, ty]
+        
+        # Head 2 forward pass (with previous fz, fy, tz)
+        h2_input = torch.cat([x2, self.prev_head2_out], dim=1)
+        h2 = self.relu(self.head2_fc1(h2_input))
+        h2 = self.relu(self.head2_fc2(h2))
+        h2 = self.relu(self.head2_fc3(h2))
+        h2_out = self.head2_fc4(h2)  # [fz, fy, tz]
+        
+        # Combine outputs to form [fx, fy, fz, tx, ty, tz]
+        fx = h1_out[:, 0:1]
+        tx = h1_out[:, 1:2]
+        ty = h1_out[:, 2:3]
+        fz = h2_out[:, 0:1]
+        fy = h2_out[:, 1:2]
+        tz = h2_out[:, 2:3]
+        
+        output = torch.cat([fx, fy, fz, tx, ty, tz], dim=1)
+
+        # Store current outputs for next forward pass (detach to avoid gradients)
+        self.prev_head1_out = h1_out.detach()
+        self.prev_head2_out = h2_out.detach()
+        
+        return output
     
 nn_model = ForceNet()
 # Note: this path only works if your working directory is Tactile. Otherwise, you might need to delete the ESP_Firmware part
