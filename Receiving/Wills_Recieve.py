@@ -15,50 +15,57 @@ import torch.nn as nn
 class ForceNet(nn.Module):
     def __init__(self):
         super(ForceNet, self).__init__()
-        # Head 1: processes first 8 elements + previous outputs, outputs fx, tx, ty
-        self.head1_fc1 = nn.Linear(8 + 3, 32)  # 8 inputs + 3 previous outputs (fx, tx, ty)
-        self.head1_fc2 = nn.Linear(32, 32)
-        self.head1_fc3 = nn.Linear(32, 32)
-        self.head1_fc4 = nn.Linear(32, 3)  # outputs [fx, tx, ty]
-        
-        # Head 2: processes second 8 elements + previous outputs, outputs fz, fy, tz
-        self.head2_fc1 = nn.Linear(8 + 3, 32)  # 8 inputs + 3 previous outputs (fz, fy, tz)
-        self.head2_fc2 = nn.Linear(32, 32)
-        self.head2_fc3 = nn.Linear(32, 32)
-        self.head2_fc4 = nn.Linear(32, 3)  # outputs [fz, fy, tz]
-        
+        # Head 1: processes first 8 elements + previous outputs + previous norm vals from the start
+        self.head1_fc1 = nn.Linear(8 + 3 + 8, 128)  # 8 current inputs + 3 previous outputs + 8 previous norm vals
+        self.head1_fc2 = nn.Linear(128, 16)
+        self.head1_fc3 = nn.Linear(16, 16)
+        self.head1_fc4 = nn.Linear(16, 3)  # outputs [fx, tx, ty]
+
+        # Head 2: processes second 8 elements + previous outputs + previous shear vals from the start
+        self.head2_fc1 = nn.Linear(8 + 3 + 8, 128)  # 8 current inputs + 3 previous outputs + 8 previous shear vals
+        self.head2_fc2 = nn.Linear(128, 16)
+        self.head2_fc3 = nn.Linear(16, 16)
+        self.head2_fc4 = nn.Linear(16, 3)  # outputs [fz, fy, tz]
+
         self.relu = nn.ReLU()
 
         # Previous outputs - will be expanded to match batch size
         self.prev_head1_out = None  # Previous [fx, tx, ty]
         self.prev_head2_out = None  # Previous [fz, fy, tz]
 
+        self.prev_norm_vals = None
+        self.prev_shear_vals = None
+
     def forward(self, x):
         batch_size = x.shape[0]
-        
+
         # Initialize previous outputs if needed (first forward pass)
         if self.prev_head1_out is None or self.prev_head1_out.shape[0] != batch_size:
             self.prev_head1_out = torch.zeros(batch_size, 3, device=x.device)
             self.prev_head2_out = torch.zeros(batch_size, 3, device=x.device)
-        
-        # Split input: first 8 elements and second 8 elements
-        x1 = x[:, :8]   # First 8 elements
-        x2 = x[:, 8:]   # Second 8 elements
 
-        # Head 1 forward pass (with previous fx, tx, ty)
-        h1_input = torch.cat([x1, self.prev_head1_out], dim=1)
+        if self.prev_norm_vals is None or self.prev_norm_vals.shape[0] != batch_size:
+            self.prev_norm_vals = torch.zeros(batch_size, 8, device=x.device)
+            self.prev_shear_vals = torch.zeros(batch_size, 8, device=x.device)
+
+        # Split input: first 8 elements and second 8 elements
+        x1 = x[:, :8]   # First 8 elements (normal forces)
+        x2 = x[:, 8:]   # Second 8 elements (shear forces)
+
+        # Head 1 forward pass - concatenate all inputs at the first layer
+        h1_input = torch.cat([x1, self.prev_head1_out, self.prev_norm_vals], dim=1)
         h1 = self.relu(self.head1_fc1(h1_input))
         h1 = self.relu(self.head1_fc2(h1))
         h1 = self.relu(self.head1_fc3(h1))
         h1_out = self.head1_fc4(h1)  # [fx, tx, ty]
-        
-        # Head 2 forward pass (with previous fz, fy, tz)
-        h2_input = torch.cat([x2, self.prev_head2_out], dim=1)
+
+        # Head 2 forward pass - concatenate all inputs at the first layer
+        h2_input = torch.cat([x2, self.prev_head2_out, self.prev_shear_vals], dim=1)
         h2 = self.relu(self.head2_fc1(h2_input))
         h2 = self.relu(self.head2_fc2(h2))
         h2 = self.relu(self.head2_fc3(h2))
         h2_out = self.head2_fc4(h2)  # [fz, fy, tz]
-        
+
         # Combine outputs to form [fx, fy, fz, tx, ty, tz]
         fx = h1_out[:, 0:1]
         tx = h1_out[:, 1:2]
@@ -66,13 +73,17 @@ class ForceNet(nn.Module):
         fz = h2_out[:, 0:1]
         fy = h2_out[:, 1:2]
         tz = h2_out[:, 2:3]
-        
+
         output = torch.cat([fx, fy, fz, tx, ty, tz], dim=1)
 
         # Store current outputs for next forward pass (detach to avoid gradients)
         self.prev_head1_out = h1_out.detach()
         self.prev_head2_out = h2_out.detach()
-        
+
+        # Store current input values for next forward pass
+        self.prev_norm_vals = x1.detach()
+        self.prev_shear_vals = x2.detach()
+
         return output
     
 nn_model = ForceNet()
@@ -123,8 +134,10 @@ def process(data, use_model=False):
     biased_data = (data - biases)
 
     if use_model:
-        # return polynomial_predict(biased_data)
-        return nn_predict(biased_data)
+        result = polynomial_predict(biased_data)
+        # result = nn_predict(biased_data)
+        result[2] = 0  # Zero out Fz (index 2: Fx=0, Fy=1, Fz=2, Tx=3, Ty=4, Tz=5)
+        return result
     else:
         return biased_data
 
@@ -153,7 +166,7 @@ fig, ax = plt.subplots()
 
 # Set y-limits based on mode
 if use_model:
-    ax.set_ylim(-1000, 1000)       # calibrated FT values
+    ax.set_ylim(-100, 100)       # calibrated FT values
 else:
     ax.set_ylim(-20000, 10000)        # raw capacitance values
 
