@@ -13,8 +13,15 @@ char inChar;
 
 ///////////////////////////////////
 // UART1 pins for the ESP32-S3 - only if functioning in single ESP mode
-#define RXD1 41 // A0
-#define TXD1 40 // A1 but transmit to PSoC not implemented yet
+///////////////////////////////////
+
+// For the ESP SUPERMINI - either define these or the next set of pins
+#define RXD1 7
+#define TXD1 6
+
+// For the purple PT Py
+// #define RXD1 41 // A0
+// #define TXD1 40 // A1 but transmit to PSoC not implemented yet
 
 char outChar;
 
@@ -112,8 +119,7 @@ void loop() {
     Serial.print(outChar);
 
     singleMode = true; // Separate from transmitter if in single mode
-  }
-
+  } 
 
   if (singleMode)
     esp_now_deinit();
