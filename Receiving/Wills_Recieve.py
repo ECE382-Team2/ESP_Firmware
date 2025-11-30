@@ -100,20 +100,20 @@ def nn_predict(X):
 
 
 ######### polynomial regression approach ##########
-poly_model = pickle.load(open('ESP_Firmware/calibration/models.pkl', 'rb'))
-poly = PolynomialFeatures(degree=2, include_bias=True)
+poly_model = pickle.load(open('ESP_Firmware/calibration/poly_model.pkl', 'rb'))
 
 def polynomial_predict(X):
-    # Load the polynomial models
-    poly_features = poly.fit_transform(X.reshape(1, -1))
-
     # Predict forces and torques
+    # Note: poly_model[name] is a Pipeline that includes PolynomialFeatures + LinearRegression
+    # So we pass the raw input directly without manual transformation
     output = np.zeros(6)
     force_torque_names = ['fx', 'fy', 'fz', 'tx', 'ty', 'tz']
 
+    X_reshaped = X.reshape(1, -1)  # Reshape to (1, 16) for single prediction
+    
     for i, name in enumerate(force_torque_names):
         if name in poly_model:
-            output[i] = poly_model[name].predict(poly_features)[0]
+            output[i] = poly_model[name].predict(X_reshaped)[0]
 
     return output
 
@@ -136,7 +136,7 @@ def process(data, use_model=False):
     if use_model:
         result = polynomial_predict(biased_data)
         # result = nn_predict(biased_data)
-        result[2] = 0  # Zero out Fz (index 2: Fx=0, Fy=1, Fz=2, Tx=3, Ty=4, Tz=5)
+        # result[2] = 0  # Zero out Fz (index 2: Fx=0, Fy=1, Fz=2, Tx=3, Ty=4, Tz=5)
         return result
     else:
         return biased_data
