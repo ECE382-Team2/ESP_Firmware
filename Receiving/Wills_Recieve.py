@@ -3,6 +3,7 @@ import time
 from xml.parsers.expat import model
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.widgets import CheckButtons
 import serial
 import joblib
 from collections import deque
@@ -86,10 +87,10 @@ class ForceNet(nn.Module):
 
         return output
     
-nn_model = ForceNet()
+# nn_model = ForceNet()
 # Note: this path only works if your working directory is Tactile. Otherwise, you might need to delete the ESP_Firmware part
-nn_model.load_state_dict(torch.load('ESP_Firmware/calibration/nn_model', weights_only=True))
-nn_model.eval()
+# nn_model.load_state_dict(torch.load('ESP_Firmware/calibration/nn_model', weights_only=True))
+# nn_model.eval()
 
 def nn_predict(X):
     with torch.no_grad():
@@ -162,7 +163,9 @@ use_model = use_model_input == 'y'
 # Setup plot
 # ==============================
 plt.ion()
-fig, ax = plt.subplots()
+fig = plt.figure(figsize=(12, 6))
+ax = plt.subplot2grid((1, 10), (0, 0), colspan=8)
+ax_check = plt.subplot2grid((1, 10), (0, 8), colspan=2)
 
 # Set y-limits based on mode
 if use_model:
@@ -185,6 +188,18 @@ for key in plot_keys:
     lines[key] = ax.plot([], [], label=key)[0]
 ax.legend()
 history = {key: deque(maxlen=max_points) for key in plot_keys}
+
+# Create checkboxes for line visibility
+visibility = {key: True for key in plot_keys}
+check = CheckButtons(ax_check, plot_keys, [True] * len(plot_keys))
+
+def toggle_visibility(label):
+    """Toggle line visibility when checkbox is clicked"""
+    visibility[label] = not visibility[label]
+    lines[label].set_visible(visibility[label])
+    plt.draw()
+
+check.on_clicked(toggle_visibility)
 
 # ==============================
 # Setup serial connection
