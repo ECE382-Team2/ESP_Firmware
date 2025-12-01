@@ -15,74 +15,43 @@ import torch.nn as nn
 class ForceNet(nn.Module):
     def __init__(self):
         super(ForceNet, self).__init__()
-        # Head 1: processes first 8 elements + previous outputs + previous norm vals from the start
-        self.head1_fc1 = nn.Linear(8 + 3 + 8, 128)  # 8 current inputs + 3 previous outputs + 8 previous norm vals
-        self.head1_fc2 = nn.Linear(128, 16)
-        self.head1_fc3 = nn.Linear(16, 16)
-        self.head1_fc4 = nn.Linear(16, 3)  # outputs [fx, tx, ty]
-
-        # Head 2: processes second 8 elements + previous outputs + previous shear vals from the start
-        self.head2_fc1 = nn.Linear(8 + 3 + 8, 128)  # 8 current inputs + 3 previous outputs + 8 previous shear vals
-        self.head2_fc2 = nn.Linear(128, 16)
-        self.head2_fc3 = nn.Linear(16, 16)
-        self.head2_fc4 = nn.Linear(16, 3)  # outputs [fz, fy, tz]
+        # Single network: processes all 16 inputs + previous 6 outputs + previous 16 capacitance
+        self.fc1 = nn.Linear(16 + 6 + 16, 256)
+        self.fc2 = nn.Linear(256, 64)
+        self.fc3 = nn.Linear(64, 32)
+        self.fc4 = nn.Linear(32, 6)  # outputs [fx, fy, fz, tx, ty, tz]
 
         self.relu = nn.ReLU()
 
-        # Previous outputs - will be expanded to match batch size
-        self.prev_head1_out = None  # Previous [fx, tx, ty]
-        self.prev_head2_out = None  # Previous [fz, fy, tz]
-
-        self.prev_norm_vals = None
-        self.prev_shear_vals = None
+        # Previous output and capacitance values
+        self.prev_output = None
+        self.prev_cap = None
 
     def forward(self, x):
         batch_size = x.shape[0]
 
-        # Initialize previous outputs if needed (first forward pass)
-        if self.prev_head1_out is None or self.prev_head1_out.shape[0] != batch_size:
-            self.prev_head1_out = torch.zeros(batch_size, 3, device=x.device)
-            self.prev_head2_out = torch.zeros(batch_size, 3, device=x.device)
+        # Initialize previous output if needed (first forward pass)
+        if self.prev_output is None or self.prev_output.shape[0] != batch_size:
+            self.prev_output = torch.zeros(batch_size, 6, device=x.device)
 
-        if self.prev_norm_vals is None or self.prev_norm_vals.shape[0] != batch_size:
-            self.prev_norm_vals = torch.zeros(batch_size, 8, device=x.device)
-            self.prev_shear_vals = torch.zeros(batch_size, 8, device=x.device)
+        # Initialize previous capacitance if needed (first forward pass)
+        if self.prev_cap is None or self.prev_cap.shape[0] != batch_size:
+            self.prev_cap = torch.zeros(batch_size, 16, device=x.device)
 
-        # Split input: first 8 elements and second 8 elements
-        x1 = x[:, :8]   # First 8 elements (normal forces)
-        x2 = x[:, 8:]   # Second 8 elements (shear forces)
+        # Concatenate current input with previous output and previous capacitance
+        combined_input = torch.cat([x, self.prev_output, self.prev_cap], dim=1)
 
-        # Head 1 forward pass - concatenate all inputs at the first layer
-        h1_input = torch.cat([x1, self.prev_head1_out, self.prev_norm_vals], dim=1)
-        h1 = self.relu(self.head1_fc1(h1_input))
-        h1 = self.relu(self.head1_fc2(h1))
-        h1 = self.relu(self.head1_fc3(h1))
-        h1_out = self.head1_fc4(h1)  # [fx, tx, ty]
+        # Forward pass through the network
+        h = self.relu(self.fc1(combined_input))
+        h = self.relu(self.fc2(h))
+        h = self.relu(self.fc3(h))
+        output = self.fc4(h)
 
-        # Head 2 forward pass - concatenate all inputs at the first layer
-        h2_input = torch.cat([x2, self.prev_head2_out, self.prev_shear_vals], dim=1)
-        h2 = self.relu(self.head2_fc1(h2_input))
-        h2 = self.relu(self.head2_fc2(h2))
-        h2 = self.relu(self.head2_fc3(h2))
-        h2_out = self.head2_fc4(h2)  # [fz, fy, tz]
+        # Store current output for next forward pass (detach to avoid gradients)
+        self.prev_output = output.detach()
 
-        # Combine outputs to form [fx, fy, fz, tx, ty, tz]
-        fx = h1_out[:, 0:1]
-        tx = h1_out[:, 1:2]
-        ty = h1_out[:, 2:3]
-        fz = h2_out[:, 0:1]
-        fy = h2_out[:, 1:2]
-        tz = h2_out[:, 2:3]
-
-        output = torch.cat([fx, fy, fz, tx, ty, tz], dim=1)
-
-        # Store current outputs for next forward pass (detach to avoid gradients)
-        self.prev_head1_out = h1_out.detach()
-        self.prev_head2_out = h2_out.detach()
-
-        # Store current input values for next forward pass
-        self.prev_norm_vals = x1.detach()
-        self.prev_shear_vals = x2.detach()
+        # Store current capacitance for next forward pass (detach to avoid gradients)
+        self.prev_cap = x.detach()
 
         return output
     
@@ -134,8 +103,8 @@ def process(data, use_model=False):
     biased_data = (data - biases)
 
     if use_model:
-        result = polynomial_predict(biased_data)
-        # result = nn_predict(biased_data)
+        # result = polynomial_predict(biased_data)
+        result = nn_predict(biased_data)
         # result[2] = 0  # Zero out Fz (index 2: Fx=0, Fy=1, Fz=2, Tx=3, Ty=4, Tz=5)
         return result
     else:
