@@ -23,6 +23,7 @@
       notebook
       ipympl
       pyserial
+      pytorch
     ]))
         ];
     };
